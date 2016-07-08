@@ -2,6 +2,7 @@
 * Este es el programa principal de softare de vuelo de kahlo v2
 **/
 #include <SFE_BMP180.h>
+#include <TimerOne.h>
 #include <Wire.h>
 
 #define MPU_addr 0x68  // I2C address of the MPU-6050
@@ -16,7 +17,6 @@ SFE_BMP180 pressure;
 double presion_base;
 
 void setup(){
-
   //Inicializacion de MPU6050 - Giroscopio Acelerometro
     Wire.begin();
     Wire.beginTransmission(MPU_addr);
@@ -38,11 +38,16 @@ void setup(){
     }
     presion_base = getPressure();  //Lectura presion barometrica 
   //-------------------------------------------------------------------
+
+  //Inicializamos Interrupcion para el envio de datos------------------
+    Timer1.initialize(200000);         // Dispara cada 200 ms
+    Timer1.attachInterrupt(ISR_imprime_datos); // Activa la interrupcion y la asocia a imprime_datos
+  //-------------------------------------------------------------------
   
   Serial.begin(9600);
 }
 
-void imprime_datos(){
+void ISR_imprime_datos(){
   Serial.print(" | cont = "); Serial.print(contador++);
   Serial.print(" | AcX = "); Serial.print(AcX);
   Serial.print(" | AcY = "); Serial.print(AcY);
@@ -76,7 +81,6 @@ void loop(){
     presion_barometrica = getPressure();
   //Fin lectura BPM180 ----------------------------------------------------------------------------------------------------------------------------------------------
   
-  imprime_datos();
   delay(333);
 }
 
