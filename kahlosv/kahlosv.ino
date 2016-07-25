@@ -8,8 +8,14 @@
 #define MPU_addr 0x68  // I2C address of the MPU-6050
 
 //--------------------------Variables de Transmision --------------------------------------
-int contador = 0;
-int16_t AcX,AcY,AcZ,Tmp,GyX,GyY,GyZ;
+char k = 'k';
+int contador = 1;
+long AcX,AcY,AcZ,Tmp,GyX,GyY,GyZ;
+double fXg = 0;
+double fYg = 0;
+double fZg = 0;
+long pitch, roll, yaw;
+const float alpha = 0.5;
 double presion_barometrica, altitud_b, tmp_b;
 //-----------------------------------------------------------------------------------------
 
@@ -41,7 +47,7 @@ void setup(){
 
   //Inicializamos Interrupcion para el envio de datos------------------
     Timer1.initialize(200000);         // Dispara cada 200 ms
-    Timer1.attachInterrupt(ISR_imprime_datos); // Activa la interrupcion y la asocia a imprime_datos
+    Timer1.attachInterrupt(ISR_envia_datos); // Activa la interrupcion y la asocia a imprime_datos
   //-------------------------------------------------------------------
   
   Serial.begin(9600);
@@ -49,16 +55,44 @@ void setup(){
 
 void ISR_imprime_datos(){
   Serial.print(" | cont = "); Serial.print(contador++);
-  Serial.print(" | AcX = "); Serial.print(AcX);
-  Serial.print(" | AcY = "); Serial.print(AcY);
-  Serial.print(" | AcZ = "); Serial.print(AcZ);
-  Serial.print(" | Tmp = "); Serial.print(Tmp);  //equation for temperature in degrees C from datasheet
-  Serial.print(" | GyX = "); Serial.print(GyX);
-  Serial.print(" | GyY = "); Serial.print(GyY);
-  Serial.print(" | GyZ = "); Serial.print(GyZ);
+  Serial.print(" | Roll = "); Serial.print(roll);
+  Serial.print(" | Pitch = "); Serial.print(pitch);
   Serial.print(" | Pb = "); Serial.print(presion_barometrica);
   Serial.print(" | tmp_b = "); Serial.print(tmp_b);
   Serial.println("");
+}
+
+byte b1, b2, b3, b4;
+void ISR_envia_datos(){
+
+  Serial.write(k);                        //Enviamos el inicion de la cadena
+  
+  b1 = (byte)contador;                    //Enviamos el contador
+  b2 = (byte)(contador >> 8);
+  Serial.write(b2);
+  Serial.write(b1);
+
+  b1 = (byte)roll;                        //Enviamos Roll
+  b2 = (byte)(roll >> 8);
+  b3 = (byte)(roll >> 16);
+  b4 = (byte)(roll >> 24);
+  Serial.write(b4);
+  Serial.write(b3);
+  Serial.write(b2);
+  Serial.write(b1);
+
+  b1 = (byte)pitch;                       //Enviamos Pitch
+  b2 = (byte)(pitch >> 8);
+  b3 = (byte)(pitch >> 16);
+  b4 = (byte)(pitch >> 24);
+  Serial.write(b4);
+  Serial.write(b3);
+  Serial.write(b2);
+  Serial.write(b1);
+
+  Serial.write(0);                        //Enviamos Yaw
+  
+  contador ++;
 }
 
 void loop(){
@@ -71,10 +105,17 @@ void loop(){
     AcX=Wire.read()<<8|Wire.read();  //Lectura acelerometro eje X
     AcY=Wire.read()<<8|Wire.read();  //Lectura acelerometro eje Y
     AcZ=Wire.read()<<8|Wire.read();  //Lectura acelerometro eje Z
-    Tmp=(Wire.read()<<8|Wire.read())/340.00+36.53;  //Lectura temperatura
-    GyX=Wire.read()<<8|Wire.read();  //Lectura giroscopio eje X
-    GyY=Wire.read()<<8|Wire.read();  //Lectura giroscopio eje Y
-    GyZ=Wire.read()<<8|Wire.read();  //Lectura giroscopio eje Z
+
+    //Low Pass Filter
+    fXg = AcX * alpha + (fXg * (1.0 - alpha));
+    fYg = AcY * alpha + (fYg * (1.0 - alpha));
+    fZg = AcZ * alpha + (fZg * (1.0 - alpha));
+
+    //Roll & Pitch Equations
+    roll  = ((atan2(-fYg, fZg)*180.0)/M_PI)*100;
+    pitch = ((atan2(fXg, sqrt(fYg*fYg + fZg*fZg))*180.0)/M_PI)*100;
+    yaw = 0;
+  
   //Fin lectura MPU605 ----------------------------------------------------------------------------------------------------------------------------------------------
 
   //Lectura de BPM180 --------------------------------------------- Presion Barometrica ------------------------------------------------------------------------
