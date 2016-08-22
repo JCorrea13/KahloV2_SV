@@ -14,10 +14,19 @@ long AcX,AcY,AcZ,Tmp,GyX,GyY,GyZ;
 double fXg = 0;
 double fYg = 0;
 double fZg = 0;
-long pitch, roll, yaw;
+long pitch_t, roll_t, yaw_t;
 const float alpha = 0.5;
 double presion_barometrica, altitud_b, tmp_b;
 //-----------------------------------------------------------------------------------------
+
+
+#define A_R 16384.0  //Ratios de conversion
+#define G_R 131.0    //Ratios de conversion
+#define RAD_A_DEG = 57.295779      //Conversion de radianes a grados 180/PI
+//ANGULOS
+float Acc[2];
+float Gy[2];
+float pitch, roll, yaw;
 
 SFE_BMP180 pressure;
 double presion_base;
@@ -72,19 +81,21 @@ void ISR_envia_datos(){
   Serial.write(b2);
   Serial.write(b1);
 
-  b1 = (byte)roll;                        //Enviamos Roll
-  b2 = (byte)(roll >> 8);
-  b3 = (byte)(roll >> 16);
-  b4 = (byte)(roll >> 24);
+  roll_t = roll * 100;
+  b1 = (byte)roll_t;                        //Enviamos Roll
+  b2 = (byte)(roll_t >> 8);
+  b3 = (byte)(roll_t >> 16);
+  b4 = (byte)(roll_t >> 24);
   Serial.write(b4);
   Serial.write(b3);
   Serial.write(b2);
   Serial.write(b1);
 
-  b1 = (byte)pitch;                       //Enviamos Pitch
-  b2 = (byte)(pitch >> 8);
-  b3 = (byte)(pitch >> 16);
-  b4 = (byte)(pitch >> 24);
+  pitch_t = pitch * 100;
+  b1 = (byte)pitch_t;                       //Enviamos Pitch
+  b2 = (byte)(pitch_t >> 8);
+  b3 = (byte)(pitch_t >> 16);
+  b4 = (byte)(pitch_t >> 24);
   Serial.write(b4);
   Serial.write(b3);
   Serial.write(b2);
@@ -106,14 +117,14 @@ void loop(){
     AcY=Wire.read()<<8|Wire.read();  //Lectura acelerometro eje Y
     AcZ=Wire.read()<<8|Wire.read();  //Lectura acelerometro eje Z
 
-    //Low Pass Filter
-    fXg = AcX * alpha + (fXg * (1.0 - alpha));
-    fYg = AcY * alpha + (fYg * (1.0 - alpha));
-    fZg = AcZ * alpha + (fZg * (1.0 - alpha));
+    Acc[0] = atan((AcY / A_R) / sqrt(pow((AcX / A_R), 2) + pow((AcZ / A_R), 2))) * RAD_TO_DEG; //Calculo del agulo en X [0]
+    Acc[1] = atan(-1 * (AcX / A_R) / sqrt(pow((AcY / A_R), 2) + pow((AcZ / A_R), 2))) * RAD_TO_DEG; //Calculo del agulo en Y [1]
+    Gy[0] = GyX / G_R;  //Calculo del angulo en X[0]
+    Gy[1] = GyY / G_R;  //Calculo del angulo en Y[1]
 
     //Roll & Pitch Equations
-    roll  = ((atan2(-fYg, fZg)*180.0)/M_PI)*100;
-    pitch = ((atan2(fXg, sqrt(fYg*fYg + fZg*fZg))*180.0)/M_PI)*100;
+    roll  =  (0.98 * (roll + Gy[0] * 0.010) + 0.02 * Acc[0]); //Filtro en X[0]
+    pitch =  (0.98 * (pitch + Gy[1] * 0.010) + 0.02 * Acc[1]); //Filtro en Y[1]
     yaw = 0;
   
   //Fin lectura MPU605 ----------------------------------------------------------------------------------------------------------------------------------------------
