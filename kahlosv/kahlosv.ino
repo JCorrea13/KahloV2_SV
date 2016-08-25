@@ -15,6 +15,7 @@ double fXg = 0;
 double fYg = 0;
 double fZg = 0;
 long pitch_t, roll_t, yaw_t;
+long lati, longi, alti;
 const float alpha = 0.5;
 double presion_barometrica, altitud_b, tmp_b;
 //-----------------------------------------------------------------------------------------
@@ -56,7 +57,7 @@ void setup(){
 
   //Inicializamos Interrupcion para el envio de datos------------------
     Timer1.initialize(200000);         // Dispara cada 200 ms
-    Timer1.attachInterrupt(ISR_envia_datos); // Activa la interrupcion y la asocia a imprime_datos
+    Timer1.attachInterrupt(ISR_imprime_datos); // Activa la interrupcion y la asocia a imprime_datos
   //-------------------------------------------------------------------
   
   Serial.begin(9600);
@@ -68,6 +69,9 @@ void ISR_imprime_datos(){
   Serial.print(" | Pitch = "); Serial.print(pitch);
   Serial.print(" | Pb = "); Serial.print(presion_barometrica);
   Serial.print(" | tmp_b = "); Serial.print(tmp_b);
+  Serial.print(" | Lat = "); Serial.print(lati);
+  Serial.print(" | Long = "); Serial.print(longi);
+  Serial.print(" | Alt = "); Serial.print(alti);
   Serial.println("");
 }
 
@@ -116,6 +120,8 @@ void loop(){
     AcX=Wire.read()<<8|Wire.read();  //Lectura acelerometro eje X
     AcY=Wire.read()<<8|Wire.read();  //Lectura acelerometro eje Y
     AcZ=Wire.read()<<8|Wire.read();  //Lectura acelerometro eje Z
+    //GyX=Wire.read()<<8|Wire.read();
+    //GyY=Wire.read()<<8|Wire.read();
 
     Acc[0] = atan((AcY / A_R) / sqrt(pow((AcX / A_R), 2) + pow((AcZ / A_R), 2))) * RAD_TO_DEG; //Calculo del agulo en X [0]
     Acc[1] = atan(-1 * (AcX / A_R) / sqrt(pow((AcY / A_R), 2) + pow((AcZ / A_R), 2))) * RAD_TO_DEG; //Calculo del agulo en Y [1]
