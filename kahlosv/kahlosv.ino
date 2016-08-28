@@ -120,18 +120,19 @@ void loop(){
     AcX=Wire.read()<<8|Wire.read();  //Lectura acelerometro eje X
     AcY=Wire.read()<<8|Wire.read();  //Lectura acelerometro eje Y
     AcZ=Wire.read()<<8|Wire.read();  //Lectura acelerometro eje Z
-    //GyX=Wire.read()<<8|Wire.read();
-    //GyY=Wire.read()<<8|Wire.read();
+    GyX=Wire.read()<<8|Wire.read();
+    GyY=Wire.read()<<8|Wire.read();
+    GyZ=Wire.read()<<8|Wire.read();
 
     Acc[0] = atan((AcY / A_R) / sqrt(pow((AcX / A_R), 2) + pow((AcZ / A_R), 2))) * RAD_TO_DEG; //Calculo del agulo en X [0]
     Acc[1] = atan(-1 * (AcX / A_R) / sqrt(pow((AcY / A_R), 2) + pow((AcZ / A_R), 2))) * RAD_TO_DEG; //Calculo del agulo en Y [1]
-    Gy[0] = GyX / G_R;  //Calculo del angulo en X[0]
-    Gy[1] = GyY / G_R;  //Calculo del angulo en Y[1]
+    //Gy[0] = GyX / G_R;  //Calculo del angulo en X[0]
+    //Gy[1] = GyY / G_R;  //Calculo del angulo en Y[1]
 
     //Roll & Pitch Equations
-    roll  =  (0.98 * (roll + Gy[0] * 0.010) + 0.02 * Acc[0]); //Filtro en X[0]
-    pitch =  (0.98 * (pitch + Gy[1] * 0.010) + 0.02 * Acc[1]); //Filtro en Y[1]
-    yaw = 0;
+    roll  = GyX; //(0.98 * (roll + Gy[0] * 0.010) + 0.02 * Acc[0]); //Filtro en X[0]
+    pitch = GyY; //(0.98 * (pitch + Gy[1] * 0.010) + 0.02 * Acc[1]); //Filtro en Y[1]
+    yaw = GyZ;//0;
   
   //Fin lectura MPU605 ----------------------------------------------------------------------------------------------------------------------------------------------
 
