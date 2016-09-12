@@ -21,7 +21,7 @@ float Angle[2];
 long x, y;
 
 void setup()
-{
+{ 
 Wire.begin();
 Wire.beginTransmission(MPU);
 Wire.write(0x6B);

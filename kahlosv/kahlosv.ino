@@ -1,38 +1,71 @@
 /**
 * Este es el programa principal de softare de vuelo de kahlo v2
 **/
+
+#include "TinyGPS.h"
+#include <SoftwareSerial.h>
 #include <SFE_BMP180.h>
 #include <TimerOne.h>
+#include <Servo.h>
 #include <Wire.h>
+#include "DHT.h"
 
 #define MPU_addr 0x68  // I2C address of the MPU-6050
+unsigned long time;
+unsigned long last_update_dht = 0;
+
+//Serial de transmision de datos
+#define PSERIAL_RX 13
+#define PSERIAL_TX 6
 
 //--------------------------Variables de Transmision --------------------------------------
 char k = 'k';
 int contador = 1;
-long AcX,AcY,AcZ,Tmp,GyX,GyY,GyZ;
-double fXg = 0;
-double fYg = 0;
-double fZg = 0;
-long pitch_t, roll_t, yaw_t;
+long pitch, roll, yaw;
 long lati, longi, alti;
-const float alpha = 0.5;
-double presion_barometrica, altitud_b, tmp_b;
+long presion_barometrica, altitud_b, tmp_b;
+long lat, lon, altitude;
+long tmp_dht, humedad;
 //-----------------------------------------------------------------------------------------
 
-
+//Variables giroscopio
 #define A_R 16384.0  //Ratios de conversion
 #define G_R 131.0    //Ratios de conversion
 #define RAD_A_DEG = 57.295779      //Conversion de radianes a grados 180/PI
+long AcX,AcY,AcZ,Tmp,GyX,GyY,GyZ;
 //ANGULOS
 float Acc[2];
 float Gy[2];
-float pitch, roll, yaw;
+float Angle[2];
 
+//Variables Barometro
 SFE_BMP180 pressure;
 double presion_base;
 
+//Variables GPS
+#define P_GPS_RX 5
+#define P_GPS_TX 12
+SoftwareSerial gpsSerial(P_GPS_RX , P_GPS_TX);
+TinyGPS gps; //creamos el objeto TinyGPS
+
+//variables dht
+#define DHTPIN 11
+#define DHTTYPE DHT22
+DHT dht(DHTPIN, DHTTYPE);
+
+
+//servo
+//Servo sLiberacion;
+//Servo sParacaidas;
+
+SoftwareSerial serial(PSERIAL_RX , PSERIAL_TX);
 void setup(){
+  
+  Wire.begin();
+  Wire.beginTransmission(MPU_addr); // transmit to device #8
+  Wire.write(0x23);        // sends five bytes
+  Wire.write(0x07);              // sends one byte
+  Wire.endTransmission();
   //Inicializacion de MPU6050 - Giroscopio Acelerometro
     Wire.begin();
     Wire.beginTransmission(MPU_addr);
@@ -42,112 +75,242 @@ void setup(){
   //Fin de inicilizacion MPU6050
 
   //Inicializacion de BMP180 - Barometro ------------------------------
-  if (pressure.begin())
-      Serial.println("BMP180 init success");
-    else
-    {
-      // Oops, something went wrong, this is usually a connection problem,
-      // see the comments at the top of this sketch for the proper connections.
-
-      Serial.println("BMP180 init fail (disconnected?)\n\n");
-      while(1); // Pause forever.
-    }
+    pressure.begin();
     presion_base = getPressure();  //Lectura presion barometrica 
   //-------------------------------------------------------------------
 
-  //Inicializamos Interrupcion para el envio de datos------------------
-    Timer1.initialize(200000);         // Dispara cada 200 ms
-    Timer1.attachInterrupt(ISR_imprime_datos); // Activa la interrupcion y la asocia a imprime_datos
-  //-------------------------------------------------------------------
+
+  //Inicializamos serial de comunicacion 
+  //NOTA: El serial de comunicacion se debe inicializar antes que el serial de GPS
+    serial.begin(115200);
+  //------------------------Iniicializamos GPS -----------------------
+    gpsSerial.begin(4800);
+    digitalWrite(P_GPS_TX, HIGH);
+  //------------------------------------------------------------------
   
-  Serial.begin(9600);
+  //Inicializamos DHT
+    dht.begin();
+
+  pinMode(9, OUTPUT);     // Declaramos el pin digital 9 como salida
+  digitalWrite(9, LOW);   // Ponemos el pin digital 9 en LOW
+  
+  //Inicializamos Interrupcion para el envio de datos------------------
+    Timer1.initialize(350000);         // Dispara cada 100 ms
+    Timer1.attachInterrupt(ISR_envia_datos); // Activa la interrupcion y la asocia a imprime_datos
+  //-------------------------------------------------------------------
+
+  //Serial.begin(57600);
 }
 
 void ISR_imprime_datos(){
-  Serial.print(" | cont = "); Serial.print(contador++);
+  /*Serial.print(" | cont = "); Serial.print(contador++);
   Serial.print(" | Roll = "); Serial.print(roll);
   Serial.print(" | Pitch = "); Serial.print(pitch);
   Serial.print(" | Pb = "); Serial.print(presion_barometrica);
   Serial.print(" | tmp_b = "); Serial.print(tmp_b);
-  Serial.print(" | Lat = "); Serial.print(lati);
-  Serial.print(" | Long = "); Serial.print(longi);
-  Serial.print(" | Alt = "); Serial.print(alti);
+  Serial.print(" | Lat = "); Serial.print(lat);
+  Serial.print(" | Long = "); Serial.print(lon);
+  Serial.print(" | Alt = "); Serial.print(altitude);
+  Serial.print(" | Temperatura_dht = "); Serial.print(tmp_dht);
+  Serial.print(" | Humedad = "); Serial.print(humedad);
   Serial.println("");
+  lat = 0;
+  lon = 0;*/
 }
 
 byte b1, b2, b3, b4;
 void ISR_envia_datos(){
 
-  Serial.write(k);                        //Enviamos el inicion de la cadena
+  serial.write(k);                        //Enviamos el inicion de la cadena
   
   b1 = (byte)contador;                    //Enviamos el contador
   b2 = (byte)(contador >> 8);
-  Serial.write(b2);
-  Serial.write(b1);
+  serial.write(b2);
+  serial.write(b1);
 
-  roll_t = roll * 100;
-  b1 = (byte)roll_t;                        //Enviamos Roll
-  b2 = (byte)(roll_t >> 8);
-  b3 = (byte)(roll_t >> 16);
-  b4 = (byte)(roll_t >> 24);
-  Serial.write(b4);
-  Serial.write(b3);
-  Serial.write(b2);
-  Serial.write(b1);
+  b1 = (byte)roll;                        //Enviamos Roll
+  b2 = (byte)(roll >> 8);
+  b3 = (byte)(roll >> 16);
+  b4 = (byte)(roll >> 24);
+  serial.write(b4);
+  serial.write(b3);
+  serial.write(b2);
+  serial.write(b1);
 
-  pitch_t = pitch * 100;
-  b1 = (byte)pitch_t;                       //Enviamos Pitch
-  b2 = (byte)(pitch_t >> 8);
-  b3 = (byte)(pitch_t >> 16);
-  b4 = (byte)(pitch_t >> 24);
-  Serial.write(b4);
-  Serial.write(b3);
-  Serial.write(b2);
-  Serial.write(b1);
+  b1 = (byte)yaw;                       //Enviamos Yaw
+  b2 = (byte)(yaw >> 8);
+  b3 = (byte)(yaw >> 16);
+  b4 = (byte)(yaw >> 24);
+  serial.write(b4);
+  serial.write(b3);
+  serial.write(b2);
+  serial.write(b1);
 
-  Serial.write(0);                        //Enviamos Yaw
+  serial.write((byte)0);                        //Enviamos Pitch
+
+  b1 = (byte)lat;                       //Enviamos Latitud
+  b2 = (byte)(lat>> 8);
+  b3 = (byte)(lat>> 16);
+  b4 = (byte)(lat>> 24);
+  serial.write(b4);
+  serial.write(b3);
+  serial.write(b2);
+  serial.write(b1);
+
+  
+  b1 = (byte)lon;                       //Enviamos Longitud
+  b2 = (byte)(lon>> 8);
+  b3 = (byte)(lon>> 16);
+  b4 = (byte)(lon>> 24);
+  serial.write(b4);
+  serial.write(b3);
+  serial.write(b2);
+  serial.write(b1);
+
+  
+  b1 = (byte)altitude;                       //Enviamos Altitud
+  b2 = (byte)(altitude >> 8);
+  b3 = (byte)(altitude >> 16);
+  b4 = (byte)(altitude >> 24);
+  serial.write(b4);
+  serial.write(b3);
+  serial.write(b2);
+  serial.write(b1);
+
+  b1 = (byte)presion_barometrica;                       //Enviamos Presion Barometrica
+  b2 = (byte)(presion_barometrica >> 8);
+  b3 = (byte)(presion_barometrica >> 16);
+  b4 = (byte)(presion_barometrica >> 24);
+  serial.write(b4);
+  serial.write(b3);
+  serial.write(b2);
+  serial.write(b1);
+  
+  b1 = (byte)tmp_b;                       //Enviamos Temperatura Barometro
+  b2 = (byte)(tmp_b >> 8);
+  b3 = (byte)(tmp_b >> 16);
+  b4 = (byte)(tmp_b >> 24);
+  serial.write(b4);
+  serial.write(b3);
+  serial.write(b2);
+  serial.write(b1);
+  
+  b1 = (byte)tmp_dht;                       //Enviamos Temperatura DHT
+  b2 = (byte)(tmp_dht >> 8);
+  b3 = (byte)(tmp_dht >> 16);
+  b4 = (byte)(tmp_dht >> 24);
+  serial.write(b4);
+  serial.write(b3);
+  serial.write(b2);
+  serial.write(b1);
+  
+  b1 = (byte)humedad;                       //Enviamos Humedad
+  b2 = (byte)(humedad >> 8);
+  b3 = (byte)(humedad >> 16);
+  b4 = (byte)(humedad >> 24);
+  serial.write(b4);
+  serial.write(b3);
+  serial.write(b2);
+  serial.write(b1);
   
   contador ++;
 }
 
 void loop(){
-
+  
   //Lectura de MPU650 --------------------------------------------- GIRSOCOPIO ACELEROMETRO ------------------------------------------------------------------------
-    Wire.beginTransmission(MPU_addr);
-    Wire.write(0x3B);  // starting with register 0x3B (ACCEL_XOUT_H)
-    Wire.endTransmission(false);
-    Wire.requestFrom(MPU_addr,14,true);  //lectura de 14 bytes a partir de la direccion 0x3B
-    AcX=Wire.read()<<8|Wire.read();  //Lectura acelerometro eje X
-    AcY=Wire.read()<<8|Wire.read();  //Lectura acelerometro eje Y
-    AcZ=Wire.read()<<8|Wire.read();  //Lectura acelerometro eje Z
-    GyX=Wire.read()<<8|Wire.read();
-    GyY=Wire.read()<<8|Wire.read();
-    GyZ=Wire.read()<<8|Wire.read();
+    getDatosGiroscopio();
+  //Lectura de BPM180 --------------------------------------------- Presion Barometrica ------------------------------------------------------------------------
+    presion_barometrica = (getPressure() * 100);
+  //Lectura GPS
+    getDatosGPS();
+  //Lectra datos DHT
+    getDatosDHT();
+  //movemos el servo
+    moverServo(9, 1); 
+}
 
-    Acc[0] = atan((AcY / A_R) / sqrt(pow((AcX / A_R), 2) + pow((AcZ / A_R), 2))) * RAD_TO_DEG; //Calculo del agulo en X [0]
-    Acc[1] = atan(-1 * (AcX / A_R) / sqrt(pow((AcY / A_R), 2) + pow((AcZ / A_R), 2))) * RAD_TO_DEG; //Calculo del agulo en Y [1]
-    //Gy[0] = GyX / G_R;  //Calculo del angulo en X[0]
-    //Gy[1] = GyY / G_R;  //Calculo del angulo en Y[1]
+void moverServo(int pin, int angulo)    // Recogemos las variables PIN y ANGULO en cada llamada 
+{
+   float pausa;                         // Declaramos la variable float para recoger los resultados de la regla de tres
+   pausa = angulo*2000.0/180.0 + 700;   // Calculamos el ancho del pulso aplicando la regla de tres
+   digitalWrite(pin, HIGH);             // Ponemos el pin en HIGH 
+   delayMicroseconds(pausa);            // Esperamos con el pin en HIGH durante el resultado de la regla de tres
+   digitalWrite(pin, LOW);              // Y ponemos de nuevo el pin en LOW
+   delayMicroseconds(25000-pausa);      // Completamos el ciclo de y empezamos uno nuevo para crear asi el tren de pulsos
+}
+
+void getDatosDHT(){
+  time = millis();
+  if((time - last_update_dht) > 100){ //validamos el tiempo necesario para la actualizacion del sensor
+    humedad = dht.readHumidity() * 100;
+    tmp_dht =  dht.readTemperature() * 100;
+    last_update_dht = time;
+  } 
+}
+
+void getDatosGPS(){
+
+  while (gpsSerial.available() > 0)
+  {
+    
+    int c = gpsSerial.read();
+    // Encode() each byte
+    // Check for new position if encode() returns "True"
+    if (gps.encode(c))
+    {
+      gps.get_position(&lat, &lon);
+      altitude = gps.f_altitude();
+    }
+  }
+}
+
+
+void getDatosGiroscopio(){
+   
+   //Leer los valores del Acelerometro de la IMU
+   Wire.beginTransmission(MPU_addr);
+   Wire.write(0x3B); //Pedir el registro 0x3B - corresponde al AcX
+   Wire.endTransmission(false);
+   Wire.requestFrom(MPU_addr,6,true); //A partir del 0x3B, se piden 6 registros
+   AcX=Wire.read()<<8|Wire.read(); //Cada valor ocupa 2 registros
+   AcY=Wire.read()<<8|Wire.read();
+   AcZ=Wire.read()<<8|Wire.read();
+ 
+    //A partir de los valores del acelerometro, se calculan los angulos Y, X
+    //respectivamente, con la formula de la tangente.
+   Acc[1] = atan(-1*(AcX/A_R)/sqrt(pow((AcY/A_R),2) + pow((AcZ/A_R),2)))*RAD_TO_DEG;
+   Acc[0] = atan((AcY/A_R)/sqrt(pow((AcX/A_R),2) + pow((AcZ/A_R),2)))*RAD_TO_DEG;
+ 
+   //Leer los valores del Giroscopio
+   Wire.beginTransmission(MPU_addr);
+   Wire.write(0x43);
+   Wire.endTransmission(false);
+   Wire.requestFrom(MPU_addr,4,true); //A diferencia del Acelerometro, solo se piden 4 registros
+   GyX=Wire.read()<<8|Wire.read();
+   GyY=Wire.read()<<8|Wire.read();
+ 
+   //Calculo del angulo del Giroscopio
+   Gy[0] = GyX/G_R;
+   Gy[1] = GyY/G_R;
+ 
+   //Aplicar el Filtro Complementario
+   Angle[0] = 0.98 *(Angle[0]+Gy[0]*0.010) + 0.02*Acc[0];
+   Angle[1] = 0.98 *(Angle[1]+Gy[1]*0.010) + 0.02*Acc[1];
+
+
 
     //Roll & Pitch Equations
-    roll  = GyX; //(0.98 * (roll + Gy[0] * 0.010) + 0.02 * Acc[0]); //Filtro en X[0]
-    pitch = GyY; //(0.98 * (pitch + Gy[1] * 0.010) + 0.02 * Acc[1]); //Filtro en Y[1]
-    yaw = GyZ;//0;
-  
-  //Fin lectura MPU605 ----------------------------------------------------------------------------------------------------------------------------------------------
-
-  //Lectura de BPM180 --------------------------------------------- Presion Barometrica ------------------------------------------------------------------------
-    presion_barometrica = getPressure();
-  //Fin lectura BPM180 ----------------------------------------------------------------------------------------------------------------------------------------------
-  
-  delay(333);
+    roll  = Angle[0] * 100;
+    yaw   = Angle[1] * 100;
+    pitch = 0;    
 }
 
 double getPressure()
 {
   char status;
   double P,p0,a;
-
+  double tmp;
   // You must first get a temperature measurement to perform a pressure reading.
   
   // Start a temperature measurement:
@@ -166,7 +329,8 @@ double getPressure()
     // Use '&T' to provide the address of T to the function.
     // Function returns 1 if successful, 0 if failure.
 
-    status = pressure.getTemperature(tmp_b);
+    status = pressure.getTemperature(tmp);
+    tmp_b = tmp * 100;
     if (status != 0)
     {
       // Start a pressure measurement:
@@ -187,7 +351,7 @@ double getPressure()
         // (If temperature is stable, you can do one temperature measurement for a number of pressure measurements.)
         // Function returns 1 if successful, 0 if failure.
 
-        status = pressure.getPressure(P,tmp_b);
+        status = pressure.getPressure(P,tmp);
         if (status != 0)
         {
           return(P);

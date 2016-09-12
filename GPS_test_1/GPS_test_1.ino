@@ -11,11 +11,8 @@ char k = 'k';
 int c;
 long lat, lon;
 long altitude; 
-float speedy;
-double lati;
-double longi; 
 byte b1, b2, b3, b4;
-SoftwareSerial gpsSerial(10 , 9); //10 -> rx, 9 -> tx
+SoftwareSerial gpsSerial(5 , 12); //6 -> rx, 5 -> tx
 
 void setup()
 {
@@ -25,7 +22,7 @@ void setup()
   //pinMode(LED1,OUTPUT);             //Declaracion de analogo 1 Sensor de Voltaje
   Serial.println("Sky-Ranger 'Serial.print'");
   gpsSerial.begin(4800);
-  digitalWrite(9, HIGH);
+  digitalWrite(5, HIGH);
 }
 void loop()
 {
@@ -50,12 +47,11 @@ void loop()
   Serial.println(lon);
   Serial.print("Altitud (mts): ");
   Serial.println(altitude);
-  Serial.print("Speed(kmph): ");
-  Serial.println(speedy);
   
   Serial.println("-------------------------------------------");
   */
 
+ 
   Serial.write(k);                        //Enviamos el inicion de la cadena
   
   b1 = (byte)lat;                       //Enviamos Latitud
@@ -86,6 +82,7 @@ void loop()
   Serial.write(b3);
   Serial.write(b2);
   Serial.write(b1);
+ 
   
   delay (300);
 
